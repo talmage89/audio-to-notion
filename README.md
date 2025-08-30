@@ -2,16 +2,6 @@
 
 This script automatically processes `.m4a` audio files by converting them to `.wav` or `.flac`, transcribing them with Whisper, and posting the transcriptions to Notion pages.
 
-## Features
-
-- 🎵 **Audio Conversion**: Converts `.m4a` files to `.wav` or `.flac` using FFmpeg
-- 🗣️ **Speech Transcription**: Uses Whisper.cpp for high-quality transcription
-- 📝 **Notion Integration**: Automatically creates new Notion pages with transcriptions
-- 📁 **Batch Processing**: Processes multiple files in the `./source/` directory
-- 🗄️ **Auto-Archiving**: Automatically archives all files after successful processing
-- 🎨 **Colored Output**: Clear, colorful logging for easy monitoring
-- ⚙️ **Configurable**: Environment variables for customization
-
 ## Prerequisites
 
 ### Required Dependencies
@@ -20,7 +10,8 @@ brew install ffmpeg jq
 ```
 
 ### Whisper.cpp Setup
-Follow Whisper.cpp's installation instructions at https://github.com/ggml-org/whisper.cpp, keep track of the paths to the binary and model. Set the `WHISPER_BIN_PATH` and `WHISPER_MODEL_PATH` environment variables to the paths to the binary and model.
+
+Follow Whisper.cpp's installation instructions at https://github.com/ggml-org/whisper.cpp.
 
 ### Notion API Setup
 
@@ -142,7 +133,7 @@ audio-conversion/
 ## Notion Page Structure
 
 Each processed audio file creates a new Notion page with:
-- **Title**: `YYYY-MM-DD - filename` (e.g., "2024-01-15 - First Transcription")
+- **Title**: `month day, year` (e.g., "Jan 15, 2024")
 - **Content**: Full transcription text
 - **Parent**: Your specified parent page
 
