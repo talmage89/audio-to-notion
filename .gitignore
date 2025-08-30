@@ -1,0 +1,11 @@
+.env
+
+source/
+converted/
+transcriptions/
+
+archives/
+
+.DS_Store
+
+*.log
