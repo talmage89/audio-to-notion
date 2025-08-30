@@ -2,6 +2,8 @@
 
 This script automatically processes `.m4a` audio files (default for Apple voice memos, audiobooks, music) by converting them to `.wav` or `.flac`, transcribing them with Whisper, and posting the transcriptions to Notion pages.
 
+The script automatically changes to its own directory when run, so it works correctly when called from anywhere (perfect for terminal aliases).
+
 ## Prerequisites
 
 ### Required Dependencies
@@ -99,6 +101,23 @@ export OUTPUT_FORMAT="flac"
 ### Help
 ```bash
 ./converter.sh --help
+```
+
+### Terminal Alias Setup
+
+For convenient use from anywhere, add an alias to your shell profile:
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+alias process-audio-files='/Users/talmage/code/utils/audio-conversion/converter.sh'
+
+# Reload your shell configuration
+source ~/.zshrc  # or source ~/.bashrc
+```
+
+Then you can run the script from any directory:
+```bash
+process-audio-files
 ```
 
 ## Output Structure

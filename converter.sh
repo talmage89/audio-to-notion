@@ -5,6 +5,15 @@
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
+# Save current directory and change to script's directory for .env file and relative paths
+ORIGINAL_DIR="$(pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Set up trap to restore original directory on script exit
+trap 'cd "$ORIGINAL_DIR"' EXIT
+
+cd "$SCRIPT_DIR"
+
 # Load environment variables from .env file if it exists
 if [ -f ".env" ]; then
     # Export variables from .env file, ignoring comments and empty lines
@@ -376,8 +385,10 @@ This script processes .m4a files in the ./source/ directory by:
 4. Archiving all files to date-organized directories
 
 CONFIGURATION:
-The script loads environment variables from a .env file if present,
-or you can set them manually in your shell.
+The script changes to its own directory and loads environment variables 
+from a .env file in that directory if present, or you can set them 
+manually in your shell. This allows the script to work correctly when 
+called from any directory (e.g., via an alias).
 
 REQUIRED ENVIRONMENT VARIABLES:
   NOTION_API_TOKEN      - Your Notion integration API token
