@@ -26,6 +26,7 @@ fi
 # Configuration - Set these environment variables
 NOTION_API_TOKEN="${NOTION_API_TOKEN:-}"
 NOTION_PARENT_PAGE_ID="${NOTION_PARENT_PAGE_ID:-}"
+OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 OUTPUT_FORMAT="${OUTPUT_FORMAT:-wav}"  # wav or flac
 WHISPER_MODEL_PATH="${WHISPER_MODEL_PATH:-}"
 WHISPER_BIN_PATH="${WHISPER_BIN_PATH:-}"
@@ -131,6 +132,61 @@ transcribe_audio() {
     else
         log_error "Transcription failed for $input_file"
         return 1
+    fi
+}
+
+# Polish transcript using OpenAI API
+polish_transcript() {
+    local transcript="$1"
+    
+    if [ -z "$OPENAI_API_KEY" ]; then
+        log_warning "OPENAI_API_KEY not set, skipping transcript polishing"
+        echo "$transcript"
+        return 0
+    fi
+    
+    # Read system prompt from file
+    local prompt_file="polish-prompt.txt"
+    if [ ! -f "$prompt_file" ]; then
+        log_warning "Prompt file not found: $prompt_file, skipping transcript polishing"
+        echo "$transcript"
+        return 0
+    fi
+    
+    local system_prompt
+    system_prompt=$(cat "$prompt_file")
+    
+    log_info "Polishing transcript with OpenAI..."
+    
+    # Escape the transcript and prompt for JSON
+    local escaped_transcript
+    escaped_transcript=$(echo "$transcript" | jq -R -s .)
+    local escaped_prompt
+    escaped_prompt=$(echo "$system_prompt" | jq -R -s .)
+    
+    local response
+    response=$(curl -s https://api.openai.com/v1/chat/completions \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -d "{
+            \"model\": \"gpt-4o-mini\",
+            \"messages\": [
+                {\"role\": \"system\", \"content\": $escaped_prompt},
+                {\"role\": \"user\", \"content\": $escaped_transcript}
+            ]
+        }")
+    
+    # Check if the API call was successful and extract the content
+    if echo "$response" | jq -e '.choices[0].message.content' > /dev/null 2>&1; then
+        local polished_content
+        polished_content=$(echo "$response" | jq -r '.choices[0].message.content')
+        log_success "Transcript polished successfully"
+        echo "$polished_content"
+    else
+        log_error "Failed to polish transcript with OpenAI API"
+        echo "$response" | jq -r '.error.message // "Unknown error"' >&2
+        # Return original transcript as fallback
+        echo "$transcript"
     fi
 }
 
@@ -363,7 +419,11 @@ process_audio_file() {
         return 1
     fi
     
-    if create_notion_page "$filename" "$transcription_content"; then
+    # Polish the transcript if OpenAI API is available
+    local polished_content
+    polished_content=$(polish_transcript "$transcription_content")
+    
+    if create_notion_page "$filename" "$polished_content"; then
         log_success "Notion page created successfully for $filename"
         
         # Archive all files after successful Notion upload
@@ -494,8 +554,9 @@ Audio Conversion and Transcription Script
 This script processes .m4a files in the ./source/ directory by:
 1. Converting them to .wav or .flac format
 2. Transcribing them using Whisper
-3. Creating Notion pages with the transcription content
-4. Archiving all files to date-organized directories
+3. Polishing transcripts using OpenAI API (if configured)
+4. Creating Notion pages with the transcription content
+5. Archiving all files to date-organized directories
 
 CONFIGURATION:
 The script changes to its own directory and loads environment variables 
@@ -511,6 +572,7 @@ REQUIRED ENVIRONMENT VARIABLES:
 
 OPTIONAL ENVIRONMENT VARIABLES:
   OUTPUT_FORMAT         - Audio output format: 'wav' or 'flac' (default: wav)
+  OPENAI_API_KEY        - OpenAI API key for transcript polishing (optional)
 
 USAGE:
   $0 [--help]
