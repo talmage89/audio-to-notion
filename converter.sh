@@ -56,7 +56,7 @@ transcribe_audio() {
     local output_file="$2"
     
     log_info "Transcribing $input_file..."
-    "$WHISPER_BIN_PATH" -m "$WHISPER_MODEL_PATH" -f "$input_file" -otxt -of "$output_file" --no-timestamps
+    "$WHISPER_BIN_PATH" -m "$WHISPER_MODEL_PATH" -f "$input_file" -otxt -of "$output_file"
     
     if [ -f "${output_file}.txt" ]; then
         mv "${output_file}.txt" "$output_file"
@@ -241,12 +241,7 @@ process_audio_file() {
         return 1
     fi
     
-    # Create Notion page
-    local today
-    today=$(date +"%b %d, %Y")
-    local page_title="${today}"
-    
-    if create_notion_page "$page_title" "$transcription_content"; then
+    if create_notion_page "$filename" "$transcription_content"; then
         log_success "Notion page created successfully for $filename"
         
         # Archive all files after successful Notion upload
@@ -276,12 +271,16 @@ check_dependencies() {
     done
     
     # Check for whisper binary
-    if [ ! -f "$WHISPER_BIN_PATH" ]; then
-        missing_deps+=("whisper (at $WHISPER_BIN_PATH)")
+    if [ -z "$WHISPER_BIN_PATH" ]; then
+        missing_deps+=("WHISPER_BIN_PATH environment variable")
+    elif [ ! -f "$WHISPER_BIN_PATH" ]; then
+        missing_deps+=("whisper binary (at $WHISPER_BIN_PATH)")
     fi
     
     # Check for whisper model
-    if [ ! -f "$WHISPER_MODEL_PATH" ]; then
+    if [ -z "$WHISPER_MODEL_PATH" ]; then
+        missing_deps+=("WHISPER_MODEL_PATH environment variable")
+    elif [ ! -f "$WHISPER_MODEL_PATH" ]; then
         missing_deps+=("whisper model (at $WHISPER_MODEL_PATH)")
     fi
     
@@ -292,7 +291,8 @@ check_dependencies() {
         echo "  - ffmpeg: brew install ffmpeg"
         echo "  - jq: brew install jq"
         echo "  - curl: Should be pre-installed"
-        echo "  - whisper: Build whisper.cpp as per your setup"
+        echo "  - whisper: Build whisper.cpp and set WHISPER_BIN_PATH and WHISPER_MODEL_PATH"
+        echo "  - Create a .env file with all required environment variables"
         exit 1
     fi
 }

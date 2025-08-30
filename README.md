@@ -133,7 +133,7 @@ audio-conversion/
 ## Notion Page Structure
 
 Each processed audio file creates a new Notion page with:
-- **Title**: `month day, year` (e.g., "Jan 15, 2024")
+- **Title**: Name of the audio file
 - **Content**: Full transcription text
 - **Parent**: Your specified parent page
 
