@@ -54,9 +54,46 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Audio conversion function (from your alias)
+# Audio conversion function with improved quality settings
 audio-convert() {
-    ffmpeg -i "$1" -ar 16000 -ac 1 "$2"
+    local input_file="$1"
+    local output_file="$2"
+    local extension="${output_file##*.}"
+    local audio_filters="highpass=f=80,lowpass=f=8000,volume=1.5,dynaudnorm"
+    
+    extension_lower=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
+    
+    case "$extension_lower" in
+        "flac")
+            # FLAC-specific settings
+            ffmpeg -i "$input_file" \
+                -af "$audio_filters" \
+                -ar 22050 \
+                -ac 1 \
+                -acodec flac \
+                -compression_level 8 \
+                "$output_file"
+            ;;
+        "wav")
+            # WAV-specific settings
+            ffmpeg -i "$input_file" \
+                -af "$audio_filters" \
+                -ar 22050 \
+                -ac 1 \
+                -acodec pcm_s16le \
+                "$output_file"
+            ;;
+        *)
+            # Default to WAV format for unknown extensions
+            log_warning "Unknown audio format '$extension', defaulting to WAV settings"
+            ffmpeg -i "$input_file" \
+                -af "$audio_filters" \
+                -ar 22050 \
+                -ac 1 \
+                -acodec pcm_s16le \
+                "$output_file"
+            ;;
+    esac
 }
 
 # Whisper transcription function
@@ -64,8 +101,28 @@ transcribe_audio() {
     local input_file="$1"
     local output_file="$2"
     
-    log_info "Transcribing $input_file..."
-    "$WHISPER_BIN_PATH" -m "$WHISPER_MODEL_PATH" -f "$input_file" -otxt -of "$output_file"
+    log_info "Transcribing $input_file with optimized settings..."
+    
+    # Enhanced Whisper parameters to reduce repetition and improve quality:
+    # -tp: Temperature (0.3) to reduce overly repetitive output
+    # -bo: Consider multiple candidates to choose the best transcription
+    # -bs: Beam search for better quality
+    # -wt: Word threshold for better word detection
+    # -et: Entropy threshold to handle uncertain segments
+    # -sns: Suppress non-speech tokens to reduce noise
+    "$WHISPER_BIN_PATH" \
+        -m "$WHISPER_MODEL_PATH" \
+        -f "$input_file" \
+        -otxt \
+        -of "$output_file" \
+        -nt \
+        -tp 0.3 \
+        -bo 5 \
+        -bs 5 \
+        -ml 0 \
+        -wt 0.01 \
+        -et 2.4 \
+        -sns
     
     if [ -f "${output_file}.txt" ]; then
         mv "${output_file}.txt" "$output_file"
@@ -75,6 +132,45 @@ transcribe_audio() {
         log_error "Transcription failed for $input_file"
         return 1
     fi
+}
+
+# Split content into chunks of specified size (default 1900 chars to be safe)
+split_content_into_chunks() {
+    local content="$1"
+    local chunk_size="${2:-1900}"  # Default to 1900 to be under 2000 char limit
+    local chunks=()
+    local current_pos=0
+    local content_length=${#content}
+    
+    while [ $current_pos -lt $content_length ]; do
+        local remaining=$((content_length - current_pos))
+        local chunk_end=$((current_pos + chunk_size))
+        
+        # If this would be the last chunk or it's smaller than chunk_size, take the rest
+        if [ $remaining -le $chunk_size ]; then
+            chunks+=("${content:$current_pos}")
+            break
+        fi
+        
+        # Find the last space before the chunk_size limit to avoid breaking words
+        local search_start=$((chunk_end - 100))  # Look back up to 100 chars for a space
+        if [ $search_start -lt $current_pos ]; then
+            search_start=$current_pos
+        fi
+        
+        local best_break=$chunk_end
+        for ((i = chunk_end; i >= search_start; i--)); do
+            if [ "${content:$i:1}" = " " ] || [ "${content:$i:1}" = $'\n' ]; then
+                best_break=$i
+                break
+            fi
+        done
+        
+        chunks+=("${content:$current_pos:$((best_break - current_pos))}")
+        current_pos=$((best_break + 1))  # Skip the space/newline
+    done
+    
+    printf '%s\0' "${chunks[@]}"
 }
 
 # Create Notion page
@@ -89,9 +185,41 @@ create_notion_page() {
     
     log_info "Creating Notion page: $title"
     
-    # Escape content for JSON
-    local escaped_content
-    escaped_content=$(echo "$content" | jq -R -s .)
+    # Split content into chunks
+    local chunks=()
+    while IFS= read -r -d '' chunk; do
+        chunks+=("$chunk")
+    done < <(split_content_into_chunks "$content")
+    
+    local chunk_count=${#chunks[@]}
+    log_info "Content split into $chunk_count chunk(s)"
+    
+    # Build children array with paragraph blocks for each chunk
+    local children_json="["
+    for ((i = 0; i < chunk_count; i++)); do
+        local escaped_chunk
+        escaped_chunk=$(echo "${chunks[$i]}" | jq -R -s .)
+        
+        if [ $i -gt 0 ]; then
+            children_json+=","
+        fi
+        
+        children_json+="{
+            \"object\": \"block\",
+            \"type\": \"paragraph\",
+            \"paragraph\": {
+                \"rich_text\": [
+                    {
+                        \"type\": \"text\",
+                        \"text\": {
+                            \"content\": $escaped_chunk
+                        }
+                    }
+                ]
+            }
+        }"
+    done
+    children_json+="]"
     
     # Create the JSON payload
     local json_payload
@@ -112,22 +240,7 @@ create_notion_page() {
             ]
         }
     },
-    "children": [
-        {
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": [
-                    {
-                        "type": "text",
-                        "text": {
-                            "content": $escaped_content
-                        }
-                    }
-                ]
-            }
-        }
-    ]
+    "children": $children_json
 }
 EOF
 )
