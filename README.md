@@ -1,6 +1,6 @@
 # Audio Conversion and Transcription Pipeline
 
-This script automatically processes `.m4a` audio files by converting them to `.wav` or `.flac`, transcribing them with Whisper, and posting the transcriptions to Notion pages.
+This script automatically processes `.m4a` audio files (default for Apple voice memos, audiobooks, music) by converting them to `.wav` or `.flac`, transcribing them with Whisper, and posting the transcriptions to Notion pages.
 
 ## Prerequisites
 
